@@ -1,0 +1,166 @@
+version: "2.2"
+
+networks:
+  monitor-net:
+    external: true
+
+volumes:
+    prometheus_data: {}
+    grafana_data: {}
+
+services:
+
+  prometheus:
+    image: prom/prometheus:v2.40.6  #v2.20.1
+    container_name: prometheus
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    cpu_shares: 1024
+    mem_limit: 1000m
+    restart: unless-stopped
+    ports:
+      - 9090:9090
+    networks:
+      - monitor-net
+#    labels:
+#      - traefik.enable=true
+#      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+
+  alertmanager:
+    image: prom/alertmanager:v0.21.0
+    container_name: alertmanager
+    volumes:
+      - ./alertmanager:/etc/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/config.yml'
+      - '--storage.path=/alertmanager'
+    restart: unless-stopped
+    cpu_shares: 512
+    mem_limit: 50m
+    ports:
+      - 9093:9093
+    networks:
+      - monitor-net
+      
+  promteam:
+    image: quay.io/prometheusmsteams/prometheus-msteams
+    container_name: promteam
+    environment:
+      - TEAMS_INCOMING_WEBHOOK_URL="https://convergytics365.webhook.office.com/webhookb2/6883d9e2-fb45-4f88-b255-f63a5ffc4db7@ccee0f6e-bef4-438b-a166-124ab99600c0/IncomingWebhook/866bb5f2f7d34f9c9d3dee45e22f36be/d559bb8c-2c14-4ae0-a75b-6394837937ac"
+      - TEAMS_REQUEST_URI="alertmanager"
+    expose:
+      - 2000
+    networks:
+      - monitor-net
+#    command:
+#      - "-teams-incoming-webhook-url \"https://convergytics365.webhook.office.com/webhookb2/6883d9e2-fb45-4f88-b255-f63a5ffc4db7@ccee0f6e-bef4-438b-a166-124ab99600c0/IncomingWebhook/866bb5f2f7d34f9c9d3dee45e22f36be/d559bb8c-2c14-4ae0-a75b-6394837937ac\""
+#    labels:
+#      - traefik.enable=true
+#      - "traefik.http.services.alertmanager.loadbalancer.server.port=9093"
+
+  nodeexporter:
+    image: prom/node-exporter:v1.5.0
+    container_name: nodeexporter
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+    restart: unless-stopped
+    cpu_shares: 512
+    mem_limit: 50m
+    ports:
+      - 9100:9100
+    networks:
+      - monitor-net
+#    labels:
+#      - traefik.enable=true
+#      - "traefik.http.services.nodeexporter.loadbalancer.server.port=9100"
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.37.0
+    container_name: cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      #- /cgroup:/cgroup:ro #doesn't work on MacOS only for Linux
+    restart: unless-stopped
+    cpu_shares: 512
+    mem_limit: 500m
+    expose:
+      - 8080
+    networks:
+      - monitor-net
+#    labels:
+#      - traefik.enable=true
+#      - "traefik.http.services.cadvisor.loadbalancer.server.port=8080"
+
+  grafana:
+    # image: grafana-custom
+    image: grafana/grafana:9.3.1
+    container_name: grafana
+    cpu_shares: 1024
+    mem_limit: 70m
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3001
+#      - GF_SMTP_ENABLED=true
+#      - GF_SMTP_SKIP_VERIFY=true
+#      - GF_SMTP_HOST=smtp.gmail.com:587
+#      - GF_SMTP_USER=parepallirevanth@gmail.com
+#      - GF_SMTP_PASSWORD=sumanth_12356
+#      - GF_SMTP_FROM_ADDRESS=parepallirevanth@gmail.com
+#      - GF_SMTP_FROM_NAME=grafana
+    restart: unless-stopped
+    ports:
+      - 3001:3000
+    networks:
+      - monitor-net
+#    labels:
+#      - traefik.enable=true
+#      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+
+  pushgateway:
+    image: prom/pushgateway:v1.5.1
+    container_name: pushgateway
+    restart: unless-stopped
+    cpu_shares: 512
+    mem_limit: 50m
+    expose:
+      - 9091
+    networks:
+      - monitor-net
+#    labels:
+#      - traefik.enable=true
+#      - "traefik.http.services.pushgateway.loadbalancer.server.port=9091"
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.23.0
+    container_name: blackbox
+    restart: unless-stopped
+    ports:
+      - "9115:9115"
+    networks:
+      - monitor-net
+#    labels:
+#      - traefik.enable=true
+#      - "traefik.http.services.blackbox.loadbalancer.server.port=9115"
+

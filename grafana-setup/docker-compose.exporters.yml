@@ -1,0 +1,48 @@
+version: '2.2'
+
+services:
+
+  nodeexporter:
+    image: prom/node-exporter:v1.0.1
+    container_name: nodeexporter
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+    restart: unless-stopped
+    # cpu_shares: 512
+    mem_limit: 50m
+    expose:
+      - 9100
+    networks:
+      - monitor-net
+#    labels:
+#      - traefik.enable=true
+#      - "traefik.http.services.nodeexporter.loadbalancer.server.port=9100"
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.37.0
+    container_name: cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      #- /cgroup:/cgroup:ro #doesn't work on MacOS only for Linux
+    restart: unless-stopped
+    # cpu_shares: 512
+    mem_limit: 50m
+    expose:
+      - 8080
+    networks:
+      - monitor-net
+#    labels:
+#      - traefik.enable=true
+#      - "traefik.http.services.cadvisor.loadbalancer.server.port=8080"
+  
+
